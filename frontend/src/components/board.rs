@@ -1,10 +1,8 @@
+use super::card::Card;
+use crate::{common::ComponentProps, Ticket};
 use stylist::{css, yew::styled_component};
 use yew::{function_component, html, Html, Properties};
 use yew_icons::{Icon, IconId};
-
-use crate::{common::ComponentProps, Ticket};
-
-use super::card::Card;
 
 #[derive(Properties, PartialEq)]
 pub struct BoardProps {

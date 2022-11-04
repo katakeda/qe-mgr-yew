@@ -54,11 +54,11 @@ async fn refresh_tickets(team: String) -> Vec<Ticket> {
 #[styled_component(StyledMain)]
 fn styled_app(props: &ComponentProps) -> Html {
     html! {
-        <main class={css!("
+        <main id={"root"} class={css!("
             background-color: #74be43;
             height: 100vh;
         ")}>
-        {props.children.clone()}
+            {props.children.clone()}
         </main>
     }
 }

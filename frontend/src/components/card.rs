@@ -1,7 +1,7 @@
-use stylist::{css, yew::styled_component};
-use yew::{function_component, html, Properties};
-
+use super::card_edit_modal::CardEditModal;
 use crate::{common::ComponentProps, Ticket};
+use stylist::{css, yew::styled_component};
+use yew::{function_component, html, use_state, Callback, Properties};
 
 #[derive(Properties, PartialEq)]
 pub struct CardProps {
@@ -47,9 +47,23 @@ fn styled_card(props: &ComponentProps) -> Html {
 
 #[function_component(Card)]
 pub fn card(props: &CardProps) -> Html {
+    let show_edit_modal = use_state(|| false);
+    let open_edit_modal = {
+        let show_edit_modal = show_edit_modal.clone();
+        Callback::from(move |_| {
+            show_edit_modal.set(true);
+        })
+    };
+    let close_edit_modal = {
+        let show_edit_modal = show_edit_modal.clone();
+        Callback::from(move |_| {
+            show_edit_modal.set(false);
+        })
+    };
+
     html! {
         <StyledCard>
-            <div class="card-detail">
+            <div class="card-detail" onclick={open_edit_modal}>
                 <div class="card-title">{props.ticket.title.clone()}</div>
                 <div class="card-description">{props.ticket.description.clone()}</div>
                 <div class="card-assigned-to">
@@ -59,6 +73,13 @@ pub fn card(props: &CardProps) -> Html {
                     }}
                 </div>
             </div>
+            {if *show_edit_modal {
+                html! {
+                    <CardEditModal close={close_edit_modal} />
+                }
+            } else {
+                html!()
+            }}
         </StyledCard>
     }
 }

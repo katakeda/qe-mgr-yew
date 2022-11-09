@@ -1,0 +1,9 @@
+# flyctl launch added from .gitignore
+target
+dist
+
+# flyctl launch added from backend/.gitignore
+backend/**/**/.cargo
+backend/target
+backend/static
+backend/db.json

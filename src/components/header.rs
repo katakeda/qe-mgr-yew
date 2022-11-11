@@ -19,6 +19,9 @@ fn styled_header(props: &ComponentProps) -> Html {
                 display: flex;
                 justify-content: space-evenly;
             }
+            .header-item > img {
+                height: 36px;
+            }
             .header-title {
                 font-family: sans-serif;
                 font-size: 32px;
@@ -94,7 +97,7 @@ pub fn header() -> Html {
     html! {
         <StyledHeader>
             <div class="header-item">
-                <img class="header-logo" src={"assets/svelte.svg"} alt="logo" />
+                <img class="header-logo" src={"assets/yew.png"} alt="logo" />
                 <span class="header-title">{"QE Manager"}</span>
             </div>
             <div class="header-item">

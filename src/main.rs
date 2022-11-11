@@ -3,7 +3,7 @@ mod components;
 
 use common::ComponentProps;
 use components::{header::Header, home::Home};
-use reqwasm::http::Request;
+use gloo_net::http::Request;
 use serde::Deserialize;
 use std::vec;
 use stylist::yew::styled_component;
@@ -38,6 +38,7 @@ pub struct AppContext {
     pub tickets: Vec<Ticket>,
     pub current_team: Option<String>,
     pub update_current_team: Callback<String>,
+    pub update_tickets: Callback<()>,
 }
 
 async fn refresh_tickets(team: String) -> Vec<Ticket> {
@@ -104,6 +105,17 @@ fn app() -> Html {
             current_team.clone(),
         );
     }
+    let update_tickets = {
+        let tickets = tickets.clone();
+        let current_team = current_team.clone();
+        Callback::from(move |_| {
+            let tickets = tickets.clone();
+            let current_team = current_team.clone();
+            spawn_local(async move {
+                tickets.set(refresh_tickets((*current_team).clone().unwrap_or("".into())).await);
+            });
+        })
+    };
     let update_current_team = {
         let current_team = current_team.clone();
         Callback::from(move |team| {
@@ -117,6 +129,7 @@ fn app() -> Html {
             teams: (*teams).clone(),
             tickets: (*tickets).clone(),
             current_team: (*current_team).clone(),
+            update_tickets,
             update_current_team,
         }}>
             <StyledMain>

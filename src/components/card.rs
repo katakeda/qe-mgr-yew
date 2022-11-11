@@ -75,7 +75,7 @@ pub fn card(props: &CardProps) -> Html {
             </div>
             {if *show_edit_modal {
                 html! {
-                    <CardEditModal close={close_edit_modal} />
+                    <CardEditModal ticket={props.ticket.clone()} close={close_edit_modal} />
                 }
             } else {
                 html!()

@@ -1,7 +1,34 @@
-use super::modal::{Modal, ModalProps};
-use crate::common::ComponentProps;
+use super::modal::Modal;
+use crate::{common::ComponentProps, AppContext, Ticket};
+use gloo_net::http::Request;
+use serde_json::json;
 use stylist::yew::styled_component;
-use yew::{function_component, html, use_state, Callback};
+use wasm_bindgen_futures::spawn_local;
+use web_sys::{Event, HtmlInputElement, HtmlTextAreaElement};
+use yew::{
+    function_component, html, use_context, use_state, Callback, Html, Properties, TargetCast,
+};
+
+#[derive(Properties, PartialEq)]
+pub struct CardEditModalProps {
+    pub ticket: Ticket,
+    pub close: Callback<()>,
+}
+
+async fn update_ticket(id: String, key: String, value: String) -> Vec<Ticket> {
+    let mut tickets = vec![];
+    let response = Request::put(&format!("/api/tickets/{}", id))
+        .json(&json!({
+            key: value,
+        }))
+        .unwrap()
+        .send()
+        .await;
+    if let Ok(r) = response {
+        tickets = r.json::<Vec<Ticket>>().await.unwrap_or(tickets);
+    }
+    tickets
+}
 
 #[styled_component(StyledCardEditModal)]
 fn styled_card_edit_modal(props: &ComponentProps) -> Html {
@@ -58,24 +85,49 @@ fn styled_card_edit_modal(props: &ComponentProps) -> Html {
 }
 
 #[function_component(CardEditModal)]
-pub fn card_edit_modal(props: &ModalProps) -> Html {
+pub fn card_edit_modal(props: &CardEditModalProps) -> Html {
+    let context = use_context::<AppContext>().expect("no ctx found");
     let editing_title = use_state(|| false);
     let editing_description = use_state(|| false);
-    let editing_status = use_state(|| false);
     let editing_assigned_to = use_state(|| false);
+    let editing_status = use_state(|| false);
+    let updated_title = use_state(|| props.ticket.title.clone());
+    let updated_description = use_state(|| props.ticket.description.clone());
+    let updated_assigned_to = use_state(|| match props.ticket.assigned_to.clone() {
+        Some(assigned_to) => assigned_to.id,
+        None => String::from(""),
+    });
 
-    let refresh_ticket = {
-        let editing_title = editing_title.clone();
-        Callback::from(move |e| {
-            editing_title.set(false);
-        })
-    };
     let save_ticket = {
         let editing_title = editing_title.clone();
-        Callback::from(move |e| {
-            editing_title.set(false);
+        let editing_description = editing_description.clone();
+        let editing_assigned_to = editing_assigned_to.clone();
+        let updated_title = updated_title.clone();
+        let updated_description = updated_description.clone();
+        let updated_assigned_to = updated_assigned_to.clone();
+        let id = props.ticket.id.clone();
+        let update_tickets = context.update_tickets.clone();
+        Callback::from(move |field: String| {
+            let id = id.clone();
+            let update_tickets = update_tickets.clone();
+            let mut state = editing_title.clone();
+            let mut value = (*updated_title).clone();
+            if field == String::from("description") {
+                state = editing_description.clone();
+                value = (*updated_description).clone();
+            }
+            if field == String::from("assigned_to") {
+                state = editing_assigned_to.clone();
+                value = (*updated_assigned_to).clone();
+            }
+            spawn_local(async move {
+                update_ticket(id, field, value).await;
+                state.set(false);
+                update_tickets.emit(());
+            });
         })
     };
+
     let delete_ticket = {
         let editing_title = editing_title.clone();
         Callback::from(move |_| {
@@ -91,13 +143,34 @@ pub fn card_edit_modal(props: &ModalProps) -> Html {
                         html! {
                             <>
                                 <div class="card-detail-label-group">
-                                    // <input type="text" bind:value={updatedTicket.title} />
-                                    <input type="text" />
+                                    <input
+                                        type="text"
+                                        value={(*updated_title).clone()}
+                                        onchange={{
+                                            let updated_title = updated_title.clone();
+                                            Callback::from(move |e: Event| {
+                                                updated_title.set(
+                                                    e.target_dyn_into::<HtmlInputElement>()
+                                                        .unwrap()
+                                                        .value()
+                                                );
+                                            })
+                                        }}
+                                    />
                                 </div>
                                 <div class="card-detail-button-group">
-                                    <button onclick={refresh_ticket}>{"Cancel"}</button>
-                                    <button onclick={save_ticket}>{"Save"}</button
-                                    >
+                                    <button onclick={{
+                                        let editing_title = editing_title.clone();
+                                        Callback::from(move |_| {
+                                            editing_title.set(false);
+                                        })
+                                    }}>{"Cancel"}</button>
+                                    <button onclick={{
+                                        let save_ticket = save_ticket.clone();
+                                        Callback::from(move |_| {
+                                            save_ticket.emit(String::from("title"));
+                                        })
+                                    }}>{"Save"}</button>
                                 </div>
                             </>
                         }
@@ -105,8 +178,7 @@ pub fn card_edit_modal(props: &ModalProps) -> Html {
                         html! {
                             <>
                                 <div class="card-detail-label-group">
-                                    // <span>{ticket.title}</span>
-                                    <span>{"title"}</span>
+                                    <span>{props.ticket.title.clone()}</span>
                                 </div>
                                 <div class="card-detail-button-group">
                                     <button onclick={{
@@ -120,75 +192,121 @@ pub fn card_edit_modal(props: &ModalProps) -> Html {
                         }
                     }}
                 </div>
-                // <div class="card-detail-group card-detail-desc">
-                //     <span>Description: </span>
-                //     {#if editingDescription}
-                //     <div class="card-detail-label-group">
-                //         <textarea bind:value={updatedTicket.description} />
-                //     </div>
-                //     <div class="card-detail-button-group">
-                //         <button
-                //         on:click={() => {
-                //             editingDescription = false;
-                //             resetTicket('description');
-                //         }}>Cancel</button
-                //         >
-                //         <button
-                //         on:click={() => {
-                //             editingDescription = false;
-                //             saveTicket({ description: updatedTicket.description });
-                //         }}>Save</button
-                //         >
-                //     </div>
-                //     {:else}
-                //     <div class="card-detail-label-group">
-                //         <span>{ticket.description}</span>
-                //     </div>
-                //     <div class="card-detail-button-group">
-                //         <button on:click={() => (editingDescription = true)}>Edit</button>
-                //     </div>
-                //     {/if}
-                // </div>
-                // <div class="card-detail-group">
-                //     <span>Assigned To: </span>
-                //     {#if editingAssignedTo}
-                //     <div class="card-detail-label-group">
-                //         <select bind:value={updatedTicket.assigned_to}>
-                //         <option default selected value={{ id: '' }}>Unassigned</option>
-                //         {#each availableUsers as user}
-                //             <option
-                //             value={user}
-                //             selected={user.id == updatedTicket.assigned_to?.id}
-                //             >{user.name}</option
-                //             >
-                //         {/each}
-                //         </select>
-                //     </div>
-                //     <div class="card-detail-button-group">
-                //         <button
-                //         on:click={() => {
-                //             editingAssignedTo = false;
-                //             resetTicket('assigned_to');
-                //         }}>Cancel</button
-                //         >
-                //         <button
-                //         on:click={() => {
-                //             editingAssignedTo = false;
-                //             saveTicket({ assigned_to: updatedTicket.assigned_to?.id });
-                //         }}>Save</button
-                //         >
-                //     </div>
-                //     {:else}
-                //     <div class="card-detail-label-group">
-                //         <span
-                //         >{ticket.assigned_to ? ticket.assigned_to.name : 'Unassigned'}</span
-                //         >
-                //     </div>
-                //     <div class="card-detail-button-group">
-                //         <button on:click={() => (editingAssignedTo = true)}>Edit</button>
-                //     </div>
-                //     {/if}
-                // </div>
+                <div class="card-detail-group card-detail-desc">
+                    <span>{"Description: "}</span>
+                    {if *editing_description {
+                        html! {
+                            <>
+                                <div class="card-detail-label-group">
+                                    <textarea
+                                        value={(*updated_description).clone()}
+                                        onchange={{
+                                            let updated_description = updated_description.clone();
+                                            Callback::from(move |e: Event| {
+                                                updated_description.set(
+                                                    e.target_dyn_into::<HtmlTextAreaElement>()
+                                                        .unwrap()
+                                                        .value()
+                                                );
+                                            })
+                                        }}
+                                    />
+                                </div>
+                                <div class="card-detail-button-group">
+                                    <button onclick={{
+                                        let editing_description = editing_description.clone();
+                                        Callback::from(move |_| {
+                                            editing_description.set(false);
+                                        })
+                                    }}>{"Cancel"}</button>
+                                    <button onclick={{
+                                        let save_ticket = save_ticket.clone();
+                                        Callback::from(move |_| {
+                                            save_ticket.emit(String::from("description"));
+                                        })
+                                    }}>{"Save"}</button>
+                                </div>
+                            </>
+                        }
+                    } else {
+                        html! {
+                            <>
+                                <div class="card-detail-label-group">
+                                    <span>{props.ticket.description.clone()}</span>
+                                </div>
+                                <div class="card-detail-button-group">
+                                    <button onclick={{
+                                        let editing_description = editing_description.clone();
+                                        Callback::from(move |_| {
+                                            editing_description.set(true);
+                                        })
+                                    }}>{"Edit"}</button>
+                                </div>
+                            </>
+                        }
+                    }}
+                </div>
+                <div class="card-detail-group">
+                    <span>{"Assigned To: "}</span>
+                    {if *editing_assigned_to {
+                        html! {
+                            <>
+                                <div class="card-detail-label-group">
+                                    <select value={(*updated_assigned_to).clone()}>
+                                        <option
+                                            default={true}
+                                            selected={true}
+                                            value={None::<String>}
+                                        >{"Unassigned"}</option>
+                                        {context.users.clone().into_iter().map(|user| {
+                                            html! {
+                                                <option
+                                                    value={user.id.clone()}
+                                                    selected={(*updated_assigned_to).clone() == user.id.clone()}
+                                                >{user.name}</option>
+                                            }
+                                        }).collect::<Html>()}
+                                    </select>
+                                </div>
+                                <div class="card-detail-button-group">
+                                    <button onclick={{
+                                        let editing_assigned_to = editing_assigned_to.clone();
+                                        Callback::from(move |_| {
+                                            editing_assigned_to.set(false);
+                                        })
+                                    }}>{"Cancel"}</button>
+                                    <button onclick={{
+                                        let save_ticket = save_ticket.clone();
+                                        Callback::from(move |_| {
+                                            save_ticket.emit(String::from("assigned_to"));
+                                        })
+                                    }}>{"Save"}</button
+                                    >
+                                </div>
+                            </>
+                        }
+                    } else {
+                        html! {
+                            <>
+                                <div class="card-detail-label-group">
+                                    {if let Some(assigned_to) = props.ticket.assigned_to.clone() {
+                                        html!(<span>{assigned_to.name}</span>)
+                                    } else {
+                                        html!(<span>{"Unassigned"}</span>)
+                                    }}
+                                </div>
+                                <div class="card-detail-button-group">
+                                    <button onclick={{
+                                        let editing_assigned_to = editing_assigned_to.clone();
+                                        Callback::from(move |_| {
+                                            editing_assigned_to.set(true);
+                                        })
+                                    }}>{"Edit"}</button>
+                                </div>
+                            </>
+                        }
+                    }}
+                </div>
                 // <div class="card-detail-group">
                 //     <span>Status: </span>
                 //     {#if editingStatus}

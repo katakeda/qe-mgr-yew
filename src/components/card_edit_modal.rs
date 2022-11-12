@@ -4,7 +4,7 @@ use gloo_net::http::Request;
 use serde_json::json;
 use stylist::yew::styled_component;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{Event, HtmlInputElement, HtmlTextAreaElement};
+use web_sys::{Event, HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement};
 use yew::{
     function_component, html, use_context, use_state, Callback, Html, Properties, TargetCast,
 };
@@ -14,6 +14,31 @@ pub struct CardEditModalProps {
     pub ticket: Ticket,
     pub close: Callback<()>,
 }
+
+#[derive(Clone)]
+pub struct Status {
+    pub value: &'static str,
+    pub label: &'static str,
+}
+
+pub const STATUSES: &[Status] = &[
+    Status {
+        value: "New",
+        label: "Ready For Review",
+    },
+    Status {
+        value: "Pending",
+        label: "In Review",
+    },
+    Status {
+        value: "Complete",
+        label: "Accepted",
+    },
+    Status {
+        value: "Rejected",
+        label: "Rejected",
+    },
+];
 
 async fn update_ticket(id: String, key: String, value: String) -> Vec<Ticket> {
     let mut tickets = vec![];
@@ -28,6 +53,12 @@ async fn update_ticket(id: String, key: String, value: String) -> Vec<Ticket> {
         tickets = r.json::<Vec<Ticket>>().await.unwrap_or(tickets);
     }
     tickets
+}
+
+async fn delete_ticket(id: String) {
+    let _response = Request::delete(&format!("/api/tickets/{}", id))
+        .send()
+        .await;
 }
 
 #[styled_component(StyledCardEditModal)]
@@ -93,6 +124,7 @@ pub fn card_edit_modal(props: &CardEditModalProps) -> Html {
     let editing_status = use_state(|| false);
     let updated_title = use_state(|| props.ticket.title.clone());
     let updated_description = use_state(|| props.ticket.description.clone());
+    let updated_status = use_state(|| props.ticket.status.clone());
     let updated_assigned_to = use_state(|| match props.ticket.assigned_to.clone() {
         Some(assigned_to) => assigned_to.id,
         None => String::from(""),
@@ -102,9 +134,11 @@ pub fn card_edit_modal(props: &CardEditModalProps) -> Html {
         let editing_title = editing_title.clone();
         let editing_description = editing_description.clone();
         let editing_assigned_to = editing_assigned_to.clone();
+        let editing_status = editing_status.clone();
         let updated_title = updated_title.clone();
         let updated_description = updated_description.clone();
         let updated_assigned_to = updated_assigned_to.clone();
+        let updated_status = updated_status.clone();
         let id = props.ticket.id.clone();
         let update_tickets = context.update_tickets.clone();
         Callback::from(move |field: String| {
@@ -120,6 +154,10 @@ pub fn card_edit_modal(props: &CardEditModalProps) -> Html {
                 state = editing_assigned_to.clone();
                 value = (*updated_assigned_to).clone();
             }
+            if field == String::from("status") {
+                state = editing_status.clone();
+                value = (*updated_status).clone();
+            }
             spawn_local(async move {
                 update_ticket(id, field, value).await;
                 state.set(false);
@@ -129,9 +167,18 @@ pub fn card_edit_modal(props: &CardEditModalProps) -> Html {
     };
 
     let delete_ticket = {
-        let editing_title = editing_title.clone();
+        let id = props.ticket.id.clone();
+        let update_tickets = context.update_tickets.clone();
+        let close = props.close.clone();
         Callback::from(move |_| {
-            editing_title.set(false);
+            let id = id.clone();
+            let update_tickets = update_tickets.clone();
+            let close = close.clone();
+            spawn_local(async move {
+                delete_ticket(id).await;
+                update_tickets.emit(());
+                close.emit(());
+            });
         })
     };
 
@@ -252,11 +299,23 @@ pub fn card_edit_modal(props: &CardEditModalProps) -> Html {
                         html! {
                             <>
                                 <div class="card-detail-label-group">
-                                    <select value={(*updated_assigned_to).clone()}>
+                                    <select
+                                        value={(*updated_assigned_to).clone()}
+                                        onchange={{
+                                            let updated_assigned_to = updated_assigned_to.clone();
+                                            Callback::from(move |e: Event| {
+                                                updated_assigned_to.set(
+                                                    e.target_dyn_into::<HtmlSelectElement>()
+                                                        .unwrap()
+                                                        .value()
+                                                );
+                                            })
+                                        }}
+                                    >
                                         <option
                                             default={true}
-                                            selected={true}
-                                            value={None::<String>}
+                                            selected={(*updated_assigned_to).clone() == ""}
+                                            value={""}
                                         >{"Unassigned"}</option>
                                         {context.users.clone().into_iter().map(|user| {
                                             html! {
@@ -307,43 +366,81 @@ pub fn card_edit_modal(props: &CardEditModalProps) -> Html {
                         }
                     }}
                 </div>
-                // <div class="card-detail-group">
-                //     <span>Status: </span>
-                //     {#if editingStatus}
-                //     <div class="card-detail-label-group">
-                //         <select bind:value={updatedTicket.status}>
-                //         {#each statuses as status}
-                //             <option
-                //             value={status.value}
-                //             selected={status.value == updatedTicket.status}
-                //             >{status.label}</option
-                //             >
-                //         {/each}
-                //         </select>
-                //     </div>
-                //     <div class="card-detail-button-group">
-                //         <button
-                //         on:click={() => {
-                //             editingStatus = false;
-                //             resetTicket('status');
-                //         }}>Cancel</button
-                //         >
-                //         <button
-                //         on:click={() => {
-                //             editingStatus = false;
-                //             saveTicket({ status: updatedTicket.status });
-                //         }}>Save</button
-                //         >
-                //     </div>
-                //     {:else}
-                //     <div class="card-detail-label-group">
-                //         <span>{statuses.find((s) => s.value === ticket.status)?.label}</span>
-                //     </div>
-                //     <div class="card-detail-button-group">
-                //         <button on:click={() => (editingStatus = true)}>Edit</button>
-                //     </div>
-                //     {/if}
-                // </div>
+                <div class="card-detail-group">
+                    <span>{"Status: "}</span>
+                    {if *editing_status {
+                        html! {
+                            <>
+                                <div class="card-detail-label-group">
+                                    <select
+                                        value={(*updated_status).clone()}
+                                        onchange={{
+                                            let updated_status = updated_status.clone();
+                                            Callback::from(move |e: Event| {
+                                                updated_status.set(
+                                                    e.target_dyn_into::<HtmlSelectElement>()
+                                                        .unwrap()
+                                                        .value()
+                                                );
+                                            })
+                                        }}
+                                    >
+                                        {STATUSES.clone().into_iter().map(|status| {
+                                            html!{
+                                                <option
+                                                    value={status.value.clone()}
+                                                    selected={status.value.clone() == (*updated_status).clone()}
+                                                >{status.label.clone()}</option>
+                                            }
+                                        }).collect::<Html>()}
+                                    </select>
+                                </div>
+                                <div class="card-detail-button-group">
+                                    <button onclick={{
+                                        let editing_status = editing_status.clone();
+                                        Callback::from(move |_| {
+                                            editing_status.set(false);
+                                        })
+                                    }}>{"Cancel"}</button>
+                                    <button onclick={{
+                                        let save_ticket = save_ticket.clone();
+                                        Callback::from(move |_| {
+                                            save_ticket.emit(String::from("status"));
+                                        })
+                                    }}>{"Save"}</button
+                                    >
+                                </div>
+                            </>
+                        }
+                    } else {
+                        html! {
+                            <>
+                                <div class="card-detail-label-group">
+                                    <span>{{
+                                        let status = props.ticket.status.clone();
+                                        STATUSES
+                                            .clone()
+                                            .into_iter()
+                                            .find(move |s| s.value == status)
+                                            .unwrap_or(&Status {
+                                                value: "",
+                                                label: "No Status",
+                                            })
+                                            .label
+                                    }}</span>
+                                </div>
+                                <div class="card-detail-button-group">
+                                    <button onclick={{
+                                        let editing_status = editing_status.clone();
+                                        Callback::from(move |_| {
+                                            editing_status.set(true);
+                                        })
+                                    }}>{"Edit"}</button>
+                                </div>
+                            </>
+                        }
+                    }}
+                </div>
                 <div class="card-detail-action-group">
                     <button onclick={delete_ticket}>{"Delete"}</button>
                 </div>
